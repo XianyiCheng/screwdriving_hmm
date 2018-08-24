@@ -10,26 +10,31 @@ classdef state  < matlab.mixin.Copyable
     
     methods
         
-        function obj = state(name,model,feature_extraction)
+        function obj = state(name,model,n_model,feature_extraction, covar)
             obj.name = name;
-            obj.n_model = numel(model);
+            obj.n_model = n_model;
+            obj.model = model;
             obj.feature_extraction = feature_extraction;
             if obj.n_model > 1
                 % gmm
                 for i =1:obj.n_model
-                    obj.prob_param.c{i} = 1/n_model;
+                    obj.prob_param.c{i} = 1/obj.n_model;
                     obj.prob_param.mean{i} = zeros(size(model{i},1),1);
-                    obj.prob_param.covar{i} = eye(size(model{i},1));
+                    obj.prob_param.covar{i} = covar; %eye(size(model{i},1));
                 end
             else
                 obj.prob_param.mean = zeros(size(model,1),1);
-                obj.prob_param.covar = eye(size(model,1));
+                obj.prob_param.covar = covar; %eye(size(model,1));
             end
         end
-                
-        function error = model_residual(obj, observation)
-            o = observation;
+        
+        function X = get_features(obj, o)
             X = obj.feature_extraction(o.force, o.torque, o.encoder, o.current, o.velocity, o.screwdrivertip, o.time);
+        end
+        
+        function error = model_residual(obj, observation, window_size)
+            o = observation;
+            X = obj.feature_extraction(o.force, o.torque, o.encoder, o.current, o.velocity, o.screwdrivertip, o.time, window_size);
             if obj.n_model > 1
                 error = cell(obj.n_model,1);
                 for i = 1:obj.n_model
@@ -40,26 +45,27 @@ classdef state  < matlab.mixin.Copyable
             end
         end
         
-        function p = prob(obj, observation)
-             err = obj.model_residual(observation);
+        function [p, err] = prob(obj, observation, window_size)
+             err = obj.model_residual(observation, window_size);
              p = sum(obj.prob_m(err));
         end
         
         function p = prob_m(obj, err)
              if obj.n_model > 1
                 %gmm
-                p=zeros(obj.n_model,1);
+                %p=zeros(obj.n_model,1);
                 for i = 1:obj.n_model
-                    p(i) =  obj.prob_param.c{i}*mvnpdf(err{i},obj.prob_param.mean{i},obj.prob_param.covar{i});
+                    p(:,i) =  obj.prob_param.c{i}*mvnpdf(err{i}',obj.prob_param.mean{i}',obj.prob_param.covar{i});
                 end
             else
                 %gaussian
-                p = mvnpdf(err,obj.prob_param.mean,obj.prob_param.covar); 
+                p = mvnpdf(err',obj.prob_param.mean',obj.prob_param.covar); 
              end
         end
         
         function updateparam(obj, loggammas, observations) 
-            % loggammas 1 x T
+            % loggammas n_sample cell: n_state x n_timesteps
+            % observations n_sample cell
             T = numel(loggammas); % num of timesteps
             gammas = exp(loggammas);
             sum_gammas = sum(gammas);

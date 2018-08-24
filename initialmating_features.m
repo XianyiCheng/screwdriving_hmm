@@ -1,10 +1,14 @@
-function X = initialmating_features(force, torque, encoder, current, velocity, screwdrivertip, time)
-window_size = 10;
+function X = initialmating_features(force, torque, encoder, current, velocity, screwdrivertip, time, window_size )
 
-kf = [force(end-window_size+1:end,3); ones([window_size,1])]\time(end-window_size+1:end);
+if nargin < 8
+    window_size = 10;
+end
+
+
+kf = [force(end-window_size+1:end,3), ones([window_size,1])]\time(end-window_size+1:end);
 zforce_gradient = kf(1);
 
-kd = [screwdrivertip(end-window_size+1:end); ones([window_size,1])]\time(end-window_size+1:end);
+kd = [screwdrivertip(end-window_size+1:end), ones([window_size,1])]\time(end-window_size+1:end);
 tip_gradient = kd(1);
 
 zforce_change = max(force(end-window_size+1:end,3)) - min(force(end-window_size+1:end,3));
